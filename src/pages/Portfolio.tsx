@@ -1,8 +1,14 @@
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, TrendingUp, TrendingDown } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Upload } from "lucide-react";
+import { CSVUpload } from "@/components/CSVUpload";
+import { RLRecommendations } from "@/components/RLRecommendations";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 const holdings = [
   { 
@@ -63,10 +69,153 @@ const holdings = [
 ];
 
 const Portfolio = () => {
+  const [holdings, setHoldings] = useState(defaultHoldings);
+  const [portfolioId, setPortfolioId] = useState<string | null>(null);
+  const [rlRecommendations, setRlRecommendations] = useState<any[]>([]);
+  const [isLoadingRL, setIsLoadingRL] = useState(false);
+  const [showUpload, setShowUpload] = useState(false);
+  const { toast } = useToast();
+
   const totalValue = holdings.reduce((sum, h) => sum + h.totalValue, 0);
   const totalGain = holdings.reduce((sum, h) => sum + h.gain, 0);
   const totalCost = totalValue - totalGain;
   const totalGainPercent = ((totalGain / totalCost) * 100).toFixed(1);
+
+  useEffect(() => {
+    loadPortfolio();
+  }, []);
+
+  const loadPortfolio = async () => {
+    const { data: portfolios } = await supabase
+      .from('portfolios')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (portfolios && portfolios.length > 0) {
+      setPortfolioId(portfolios[0].id);
+      loadHoldings(portfolios[0].id);
+      loadRecommendations(portfolios[0].id);
+    }
+  };
+
+  const loadHoldings = async (portId: string) => {
+    const { data } = await supabase
+      .from('portfolio_holdings')
+      .select('*')
+      .eq('portfolio_id', portId);
+
+    if (data && data.length > 0) {
+      // Transform DB data to UI format (simplified for demo)
+      const transformed = data.map(h => ({
+        symbol: h.symbol,
+        name: h.symbol,
+        shares: Number(h.shares),
+        avgCost: Number(h.avg_cost),
+        currentPrice: Number(h.avg_cost) * 1.1, // Mock current price
+        totalValue: Number(h.shares) * Number(h.avg_cost) * 1.1,
+        gain: Number(h.shares) * Number(h.avg_cost) * 0.1,
+        gainPercent: 10,
+        sector: h.sector || 'Unknown'
+      }));
+      setHoldings(transformed);
+    }
+  };
+
+  const loadRecommendations = async (portId: string) => {
+    const { data } = await supabase
+      .from('rl_recommendations')
+      .select('*')
+      .eq('portfolio_id', portId)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (data) {
+      setRlRecommendations(data.map(r => ({
+        symbol: r.symbol,
+        action: r.action,
+        confidence: Number(r.confidence),
+        expected_return: Number(r.expected_return),
+        reasoning: r.reasoning
+      })));
+    }
+  };
+
+  const handleCSVData = async (data: any[]) => {
+    try {
+      // Create portfolio if doesn't exist
+      let portId = portfolioId;
+      if (!portId) {
+        const { data: newPortfolio } = await supabase
+          .from('portfolios')
+          .insert({ name: 'Imported Portfolio' })
+          .select()
+          .single();
+        portId = newPortfolio?.id || null;
+        setPortfolioId(portId);
+      }
+
+      if (portId) {
+        // Insert holdings
+        const { error } = await supabase
+          .from('portfolio_holdings')
+          .insert(
+            data.map(h => ({
+              portfolio_id: portId,
+              symbol: h.symbol,
+              shares: h.shares,
+              avg_cost: h.avgCost,
+              sector: h.sector
+            }))
+          );
+
+        if (!error) {
+          await loadHoldings(portId);
+          await generateRLRecommendations(portId);
+          setShowUpload(false);
+        }
+      }
+    } catch (error) {
+      console.error('Error saving portfolio:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save portfolio",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const generateRLRecommendations = async (portId: string | null) => {
+    if (!portId) return;
+    
+    setIsLoadingRL(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('rl-recommendations', {
+        body: { 
+          portfolio_id: portId,
+          holdings: holdings.map(h => ({
+            symbol: h.symbol,
+            shares: h.shares,
+            avgCost: h.avgCost,
+            currentPrice: h.currentPrice,
+            gainPercent: h.gainPercent
+          }))
+        }
+      });
+
+      if (!error && data?.recommendations) {
+        setRlRecommendations(data.recommendations);
+        toast({
+          title: "RL Analysis Complete",
+          description: `Generated ${data.recommendations.length} recommendations`
+        });
+      }
+    } catch (error) {
+      console.error('Error generating RL recommendations:', error);
+    } finally {
+      setIsLoadingRL(false);
+    }
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -75,10 +224,26 @@ const Portfolio = () => {
           <h1 className="text-3xl font-bold">Portfolio</h1>
           <p className="text-muted-foreground">Manage your investment holdings</p>
         </div>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Holding
-        </Button>
+        <div className="flex gap-2">
+          <Dialog open={showUpload} onOpenChange={setShowUpload}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <Upload className="mr-2 h-4 w-4" />
+                Import CSV
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Import Portfolio from CSV</DialogTitle>
+              </DialogHeader>
+              <CSVUpload onDataParsed={handleCSVData} />
+            </DialogContent>
+          </Dialog>
+          <Button onClick={() => generateRLRecommendations(portfolioId)} disabled={isLoadingRL}>
+            <Plus className="mr-2 h-4 w-4" />
+            {isLoadingRL ? 'Analyzing...' : 'Generate RL Insights'}
+          </Button>
+        </div>
       </div>
 
       {/* Summary Cards */}
@@ -158,8 +323,73 @@ const Portfolio = () => {
           </Table>
         </CardContent>
       </Card>
+
+      {/* RL Recommendations */}
+      <RLRecommendations 
+        recommendations={rlRecommendations}
+        onRefresh={() => generateRLRecommendations(portfolioId)}
+        isLoading={isLoadingRL}
+      />
     </div>
   );
 };
+
+const defaultHoldings = [
+  { 
+    symbol: "AAPL", 
+    name: "Apple Inc.", 
+    shares: 50, 
+    avgCost: 150.50, 
+    currentPrice: 175.30, 
+    totalValue: 8765, 
+    gain: 1240,
+    gainPercent: 16.5,
+    sector: "Technology"
+  },
+  { 
+    symbol: "MSFT", 
+    name: "Microsoft Corp.", 
+    shares: 40, 
+    avgCost: 280.00, 
+    currentPrice: 335.50, 
+    totalValue: 13420, 
+    gain: 2220,
+    gainPercent: 19.8,
+    sector: "Technology"
+  },
+  { 
+    symbol: "GOOGL", 
+    name: "Alphabet Inc.", 
+    shares: 30, 
+    avgCost: 125.00, 
+    currentPrice: 138.75, 
+    totalValue: 4163, 
+    gain: 413,
+    gainPercent: 11.0,
+    sector: "Technology"
+  },
+  { 
+    symbol: "JPM", 
+    name: "JPMorgan Chase", 
+    shares: 60, 
+    avgCost: 145.00, 
+    currentPrice: 152.80, 
+    totalValue: 9168, 
+    gain: 468,
+    gainPercent: 5.4,
+    sector: "Finance"
+  },
+  { 
+    symbol: "JNJ", 
+    name: "Johnson & Johnson", 
+    shares: 45, 
+    avgCost: 165.00, 
+    currentPrice: 158.20, 
+    totalValue: 7119, 
+    gain: -306,
+    gainPercent: -4.1,
+    sector: "Healthcare"
+  },
+];
 
 export default Portfolio;

@@ -1,1 +1,7 @@
 project_id = "rezsvipdmpfildvfkxhc"
+
+[functions.analyze-sentiment]
+verify_jwt = false
+
+[functions.rl-recommendations]
+verify_jwt = false

@@ -78,7 +78,7 @@ const Landing = () => {
                 </div>
                 <h3 className="text-xl font-bold mb-2">AI Sentiment Analysis</h3>
                 <p className="text-muted-foreground">
-                  Real-time market sentiment tracking using advanced NLP models
+                  Real-time sentiment analysis using FinBERT and NLP on news/social media
                 </p>
               </CardContent>
             </Card>
@@ -88,9 +88,9 @@ const Landing = () => {
                 <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-accent/10 flex items-center justify-center">
                   <TrendingUp className="w-8 h-8 text-accent" />
                 </div>
-                <h3 className="text-xl font-bold mb-2">Performance Tracking</h3>
+                <h3 className="text-xl font-bold mb-2">RL Recommendations</h3>
                 <p className="text-muted-foreground">
-                  Monitor your portfolio's growth with interactive charts
+                  Reinforcement learning agent provides buy/sell/hold insights with confidence scores
                 </p>
               </CardContent>
             </Card>
@@ -100,9 +100,9 @@ const Landing = () => {
                 <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-warning/10 flex items-center justify-center">
                   <Shield className="w-8 h-8 text-warning" />
                 </div>
-                <h3 className="text-xl font-bold mb-2">Risk Metrics</h3>
+                <h3 className="text-xl font-bold mb-2">CSV Import/Export</h3>
                 <p className="text-muted-foreground">
-                  Sharpe ratio, volatility, and drawdown analysis
+                  Easily import portfolios via CSV and export analysis reports for presentations
                 </p>
               </CardContent>
             </Card>

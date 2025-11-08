@@ -1,8 +1,12 @@
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Brain, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Brain, TrendingUp, TrendingDown, Minus, RefreshCw } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 const sentimentHistory = [
   { date: "Week 1", overall: 0.65, news: 0.70, social: 0.60 },
@@ -39,13 +43,90 @@ const getTrendIcon = (trend: string) => {
 };
 
 const Sentiment = () => {
-  const overallScore = 0.76;
+  const [sentimentData, setSentimentData] = useState(stockSentiments);
+  const [overallScore, setOverallScore] = useState(0.76);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    loadSentimentData();
+  }, []);
+
+  const loadSentimentData = async () => {
+    const { data } = await supabase
+      .from('sentiment_analysis')
+      .select('*')
+      .order('analyzed_at', { ascending: false });
+
+    if (data && data.length > 0) {
+      // Group by symbol and get latest
+      const latestBySymbol = new Map();
+      data.forEach(item => {
+        if (!latestBySymbol.has(item.symbol)) {
+          latestBySymbol.set(item.symbol, {
+            symbol: item.symbol,
+            name: item.symbol,
+            score: Number(item.sentiment_score),
+            trend: item.sentiment_label,
+            change: `${(Number(item.sentiment_score) * 100).toFixed(0)}%`,
+            key_points: item.key_points
+          });
+        }
+      });
+
+      const sentiments = Array.from(latestBySymbol.values());
+      setSentimentData(sentiments);
+      
+      const avgScore = sentiments.reduce((sum, s) => sum + s.score, 0) / sentiments.length;
+      setOverallScore(avgScore);
+    }
+  };
+
+  const analyzeSentiment = async () => {
+    setIsAnalyzing(true);
+    try {
+      const symbols = ['AAPL', 'MSFT', 'GOOGL', 'JPM', 'JNJ'];
+      
+      const { data, error } = await supabase.functions.invoke('analyze-sentiment', {
+        body: { symbols }
+      });
+
+      if (!error && data?.success) {
+        await loadSentimentData();
+        toast({
+          title: "Sentiment Analysis Complete",
+          description: `Analyzed sentiment for ${symbols.length} stocks`
+        });
+      } else {
+        throw new Error(error?.message || 'Failed to analyze sentiment');
+      }
+    } catch (error) {
+      console.error('Sentiment analysis error:', error);
+      toast({
+        title: "Error",
+        description: "Failed to analyze sentiment. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div>
-        <h1 className="text-3xl font-bold">AI Sentiment Analysis</h1>
-        <p className="text-muted-foreground">Real-time market sentiment powered by NLP</p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold">AI Sentiment Analysis</h1>
+          <p className="text-muted-foreground">Real-time market sentiment powered by NLP</p>
+        </div>
+        <Button 
+          onClick={analyzeSentiment} 
+          disabled={isAnalyzing}
+          variant="outline"
+        >
+          <RefreshCw className={`mr-2 h-4 w-4 ${isAnalyzing ? 'animate-spin' : ''}`} />
+          {isAnalyzing ? 'Analyzing...' : 'Refresh Sentiment'}
+        </Button>
       </div>
 
       {/* Overall Sentiment Card */}
@@ -119,7 +200,7 @@ const Sentiment = () => {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {stockSentiments.map((stock) => (
+            {sentimentData.map((stock) => (
               <div key={stock.symbol} className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
                 <div className="flex items-center gap-4 flex-1">
                   <div>
