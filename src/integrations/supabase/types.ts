@@ -14,7 +14,145 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      portfolio_holdings: {
+        Row: {
+          avg_cost: number
+          created_at: string
+          id: string
+          portfolio_id: string
+          sector: string | null
+          shares: number
+          symbol: string
+          updated_at: string
+        }
+        Insert: {
+          avg_cost: number
+          created_at?: string
+          id?: string
+          portfolio_id: string
+          sector?: string | null
+          shares: number
+          symbol: string
+          updated_at?: string
+        }
+        Update: {
+          avg_cost?: number
+          created_at?: string
+          id?: string
+          portfolio_id?: string
+          sector?: string | null
+          shares?: number
+          symbol?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_holdings_portfolio_id_fkey"
+            columns: ["portfolio_id"]
+            isOneToOne: false
+            referencedRelation: "portfolios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portfolios: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      rl_recommendations: {
+        Row: {
+          action: string
+          confidence: number
+          created_at: string
+          expected_return: number | null
+          id: string
+          portfolio_id: string
+          reasoning: string | null
+          symbol: string
+        }
+        Insert: {
+          action: string
+          confidence: number
+          created_at?: string
+          expected_return?: number | null
+          id?: string
+          portfolio_id: string
+          reasoning?: string | null
+          symbol: string
+        }
+        Update: {
+          action?: string
+          confidence?: number
+          created_at?: string
+          expected_return?: number | null
+          id?: string
+          portfolio_id?: string
+          reasoning?: string | null
+          symbol?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rl_recommendations_portfolio_id_fkey"
+            columns: ["portfolio_id"]
+            isOneToOne: false
+            referencedRelation: "portfolios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sentiment_analysis: {
+        Row: {
+          analyzed_at: string
+          id: string
+          key_points: Json | null
+          news_count: number | null
+          sentiment_label: string
+          sentiment_score: number
+          symbol: string
+        }
+        Insert: {
+          analyzed_at?: string
+          id?: string
+          key_points?: Json | null
+          news_count?: number | null
+          sentiment_label: string
+          sentiment_score: number
+          symbol: string
+        }
+        Update: {
+          analyzed_at?: string
+          id?: string
+          key_points?: Json | null
+          news_count?: number | null
+          sentiment_label?: string
+          sentiment_score?: number
+          symbol?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
