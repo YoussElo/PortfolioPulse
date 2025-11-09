@@ -38,7 +38,13 @@ export const CSVUpload = ({ onDataParsed }: CSVUploadProps) => {
         avgCost: parseFloat(values[costIdx]),
         sector: sectorIdx !== -1 ? values[sectorIdx] : 'Unknown'
       };
-    }).filter(item => item.symbol && !isNaN(item.shares) && !isNaN(item.avgCost));
+    }).filter(item => 
+      item.symbol && 
+      !isNaN(item.shares) && 
+      !isNaN(item.avgCost) && 
+      item.shares > 0 && 
+      item.avgCost > 0
+    );
 
     return data;
   };

@@ -169,10 +169,21 @@ const Portfolio = () => {
             }))
           );
 
-        if (!error) {
+        if (error) {
+          console.error('Error inserting holdings:', error);
+          toast({
+            title: "Error",
+            description: error.message || "Failed to save portfolio holdings",
+            variant: "destructive"
+          });
+        } else {
           await loadHoldings(portId);
           await generateRLRecommendations(portId);
           setShowUpload(false);
+          toast({
+            title: "Success",
+            description: `Imported ${data.length} holdings successfully`,
+          });
         }
       }
     } catch (error) {
