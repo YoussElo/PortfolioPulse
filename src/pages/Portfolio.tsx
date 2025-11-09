@@ -10,7 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
-const holdings = [
+const defaultHoldings = [
   { 
     symbol: "AAPL", 
     name: "Apple Inc.", 
@@ -186,10 +186,20 @@ const Portfolio = () => {
   };
 
   const generateRLRecommendations = async (portId: string | null) => {
-    if (!portId) return;
+    if (!portId) {
+      toast({
+        title: "No Portfolio",
+        description: "Please create or import a portfolio first",
+        variant: "destructive"
+      });
+      return;
+    }
     
     setIsLoadingRL(true);
     try {
+      console.log('Generating RL recommendations for portfolio:', portId);
+      console.log('Holdings data:', holdings);
+      
       const { data, error } = await supabase.functions.invoke('rl-recommendations', {
         body: { 
           portfolio_id: portId,
@@ -203,15 +213,38 @@ const Portfolio = () => {
         }
       });
 
-      if (!error && data?.recommendations) {
+      console.log('RL recommendations response:', { data, error });
+
+      if (error) {
+        console.error('Error from edge function:', error);
+        toast({
+          title: "Error",
+          description: error.message || "Failed to generate recommendations",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      if (data?.recommendations) {
         setRlRecommendations(data.recommendations);
         toast({
           title: "RL Analysis Complete",
           description: `Generated ${data.recommendations.length} recommendations`
         });
+      } else {
+        toast({
+          title: "No Recommendations",
+          description: "No recommendations were generated",
+          variant: "destructive"
+        });
       }
     } catch (error) {
       console.error('Error generating RL recommendations:', error);
+      toast({
+        title: "Error",
+        description: "Failed to generate recommendations",
+        variant: "destructive"
+      });
     } finally {
       setIsLoadingRL(false);
     }
@@ -333,63 +366,5 @@ const Portfolio = () => {
     </div>
   );
 };
-
-const defaultHoldings = [
-  { 
-    symbol: "AAPL", 
-    name: "Apple Inc.", 
-    shares: 50, 
-    avgCost: 150.50, 
-    currentPrice: 175.30, 
-    totalValue: 8765, 
-    gain: 1240,
-    gainPercent: 16.5,
-    sector: "Technology"
-  },
-  { 
-    symbol: "MSFT", 
-    name: "Microsoft Corp.", 
-    shares: 40, 
-    avgCost: 280.00, 
-    currentPrice: 335.50, 
-    totalValue: 13420, 
-    gain: 2220,
-    gainPercent: 19.8,
-    sector: "Technology"
-  },
-  { 
-    symbol: "GOOGL", 
-    name: "Alphabet Inc.", 
-    shares: 30, 
-    avgCost: 125.00, 
-    currentPrice: 138.75, 
-    totalValue: 4163, 
-    gain: 413,
-    gainPercent: 11.0,
-    sector: "Technology"
-  },
-  { 
-    symbol: "JPM", 
-    name: "JPMorgan Chase", 
-    shares: 60, 
-    avgCost: 145.00, 
-    currentPrice: 152.80, 
-    totalValue: 9168, 
-    gain: 468,
-    gainPercent: 5.4,
-    sector: "Finance"
-  },
-  { 
-    symbol: "JNJ", 
-    name: "Johnson & Johnson", 
-    shares: 45, 
-    avgCost: 165.00, 
-    currentPrice: 158.20, 
-    totalValue: 7119, 
-    gain: -306,
-    gainPercent: -4.1,
-    sector: "Healthcare"
-  },
-];
 
 export default Portfolio;

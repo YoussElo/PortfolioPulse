@@ -14,9 +14,19 @@ serve(async (req) => {
   try {
     const { portfolio_id, holdings } = await req.json();
     console.log('Generating RL recommendations for portfolio:', portfolio_id);
+    console.log('Received holdings:', JSON.stringify(holdings));
+
+    if (!holdings || holdings.length === 0) {
+      console.error('No holdings provided');
+      return new Response(
+        JSON.stringify({ error: 'No holdings provided' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
+      console.error('LOVABLE_API_KEY not configured');
       throw new Error('LOVABLE_API_KEY not configured');
     }
 
@@ -26,11 +36,17 @@ serve(async (req) => {
 
     // Get sentiment data for holdings
     const symbols = holdings.map((h: any) => h.symbol);
-    const { data: sentimentData } = await supabase
+    console.log('Fetching sentiment for symbols:', symbols);
+    
+    const { data: sentimentData, error: sentimentError } = await supabase
       .from('sentiment_analysis')
       .select('*')
       .in('symbol', symbols)
       .order('analyzed_at', { ascending: false });
+
+    if (sentimentError) {
+      console.error('Error fetching sentiment data:', sentimentError);
+    }
 
     const sentimentMap = new Map();
     sentimentData?.forEach(s => {
@@ -52,6 +68,8 @@ serve(async (req) => {
         sentiment_label: sentiment?.sentiment_label || 'neutral'
       };
     }).map((h: any) => JSON.stringify(h)).join('\n');
+
+    console.log('Sending request to Lovable AI...');
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -106,16 +124,27 @@ serve(async (req) => {
     if (!response.ok) {
       const error = await response.text();
       console.error('AI API error:', response.status, error);
-      throw new Error(`AI API error: ${response.status}`);
+      throw new Error(`AI API error: ${response.status} - ${error}`);
     }
 
     const data = await response.json();
+    console.log('AI response received:', JSON.stringify(data));
+    
     const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-    const analysis = toolCall ? JSON.parse(toolCall.function.arguments) : { recommendations: [] };
+    
+    if (!toolCall) {
+      console.error('No tool call in AI response');
+      throw new Error('AI did not return recommendations in expected format');
+    }
+    
+    const analysis = JSON.parse(toolCall.function.arguments);
+    console.log('Parsed analysis:', JSON.stringify(analysis));
 
     // Store recommendations in database
     const recommendations = analysis.recommendations;
-    if (recommendations.length > 0) {
+    if (recommendations && recommendations.length > 0) {
+      console.log(`Storing ${recommendations.length} recommendations in database`);
+      
       const { error: insertError } = await supabase
         .from('rl_recommendations')
         .insert(
@@ -131,9 +160,12 @@ serve(async (req) => {
 
       if (insertError) {
         console.error('Error storing RL recommendations:', insertError);
+      } else {
+        console.log('Successfully stored recommendations in database');
       }
     }
 
+    console.log('Returning recommendations to client');
     return new Response(
       JSON.stringify({ success: true, recommendations }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
