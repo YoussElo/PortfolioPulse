@@ -72,6 +72,7 @@ const Portfolio = () => {
   const [holdings, setHoldings] = useState(defaultHoldings);
   const [portfolioId, setPortfolioId] = useState<string | null>(null);
   const [rlRecommendations, setRlRecommendations] = useState<any[]>([]);
+  const [newOpportunities, setNewOpportunities] = useState<any[]>([]);
   const [isLoadingRL, setIsLoadingRL] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const { toast } = useToast();
@@ -236,11 +237,14 @@ const Portfolio = () => {
         return;
       }
 
-      if (data?.recommendations) {
-        setRlRecommendations(data.recommendations);
+      if (data?.portfolio_recommendations) {
+        setRlRecommendations(data.portfolio_recommendations);
+        setNewOpportunities(data.new_opportunities || []);
+        
+        const totalRecs = data.portfolio_recommendations.length + (data.new_opportunities?.length || 0);
         toast({
           title: "RL Analysis Complete",
-          description: `Generated ${data.recommendations.length} recommendations`
+          description: `Generated ${data.portfolio_recommendations.length} portfolio recommendations and ${data.new_opportunities?.length || 0} new opportunities`
         });
       } else {
         toast({
@@ -371,6 +375,7 @@ const Portfolio = () => {
       {/* RL Recommendations */}
       <RLRecommendations 
         recommendations={rlRecommendations}
+        newOpportunities={newOpportunities}
         onRefresh={() => generateRLRecommendations(portfolioId)}
         isLoading={isLoadingRL}
       />

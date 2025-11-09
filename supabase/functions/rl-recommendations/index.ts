@@ -34,30 +34,43 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get sentiment data for holdings
-    const symbols = holdings.map((h: any) => h.symbol);
-    console.log('Fetching sentiment for symbols:', symbols);
+    // Portfolio symbols
+    const portfolioSymbols = holdings.map((h: any) => h.symbol);
+    console.log('Portfolio symbols:', portfolioSymbols);
     
+    // Popular stocks to analyze for new opportunities
+    const popularStocks = ['NVDA', 'AMD', 'META', 'AMZN', 'NFLX', 'DIS', 'BA', 'V', 'MA', 'UNH', 'COST', 'INTC'];
+    const newOpportunitySymbols = popularStocks.filter(s => !portfolioSymbols.includes(s));
+    console.log('Analyzing new opportunities:', newOpportunitySymbols);
+    
+    const allSymbols = [...portfolioSymbols, ...newOpportunitySymbols];
+    
+    // Get sentiment data
     const { data: sentimentData, error: sentimentError } = await supabase
       .from('sentiment_analysis')
       .select('*')
-      .in('symbol', symbols)
+      .in('symbol', allSymbols)
       .order('analyzed_at', { ascending: false });
 
     if (sentimentError) {
       console.error('Error fetching sentiment data:', sentimentError);
     }
 
-    const sentimentMap = new Map();
+    // Create sentiment maps
+    const portfolioSentimentMap = new Map();
+    const opportunitySentimentMap = new Map();
+    
     sentimentData?.forEach(s => {
-      if (!sentimentMap.has(s.symbol)) {
-        sentimentMap.set(s.symbol, s);
+      if (portfolioSymbols.includes(s.symbol) && !portfolioSentimentMap.has(s.symbol)) {
+        portfolioSentimentMap.set(s.symbol, s);
+      } else if (newOpportunitySymbols.includes(s.symbol) && !opportunitySentimentMap.has(s.symbol)) {
+        opportunitySentimentMap.set(s.symbol, s);
       }
     });
 
-    // Generate RL recommendations using AI
+    // Generate portfolio context
     const portfolioContext = holdings.map((h: any) => {
-      const sentiment = sentimentMap.get(h.symbol);
+      const sentiment = portfolioSentimentMap.get(h.symbol);
       return {
         symbol: h.symbol,
         shares: h.shares,
@@ -68,6 +81,16 @@ serve(async (req) => {
         sentiment_label: sentiment?.sentiment_label || 'neutral'
       };
     }).map((h: any) => JSON.stringify(h)).join('\n');
+
+    // Generate opportunities context
+    const opportunitiesContext = newOpportunitySymbols.map(symbol => {
+      const sentiment = opportunitySentimentMap.get(symbol);
+      return {
+        symbol,
+        sentiment_score: sentiment?.sentiment_score || 0.5,
+        sentiment_label: sentiment?.sentiment_label || 'neutral'
+      };
+    }).map((o: any) => JSON.stringify(o)).join('\n');
 
     console.log('Sending request to Lovable AI...');
 
@@ -82,22 +105,22 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: 'You are an advanced Reinforcement Learning agent trained for portfolio optimization. Analyze portfolio holdings considering technical indicators, sentiment scores, and risk metrics. Provide actionable recommendations (buy/sell/hold/rebalance) with confidence scores and reasoning.'
+            content: 'You are an advanced Reinforcement Learning agent trained for portfolio optimization. Analyze portfolio holdings and identify new investment opportunities based on sentiment analysis. Provide actionable recommendations with confidence scores and reasoning.'
           },
           {
             role: 'user',
-            content: `Portfolio Analysis:\n${portfolioContext}\n\nProvide RL-based trading recommendations for each stock. Consider:\n1. Sentiment scores and market mood\n2. Current gains/losses\n3. Diversification needs\n4. Risk-adjusted returns\n\nReturn recommendations in JSON format.`
+            content: `Current Portfolio Analysis:\n${portfolioContext}\n\nPotential New Investment Opportunities (NOT in portfolio):\n${opportunitiesContext}\n\nProvide:\n1. Recommendations for existing holdings (buy/sell/hold/rebalance)\n2. Suggest 2-3 NEW stocks to consider buying based on positive sentiment\n\nConsider sentiment scores, gains/losses, and diversification.`
           }
         ],
         tools: [{
           type: "function",
           function: {
             name: "generate_rl_recommendations",
-            description: "Generate RL agent recommendations for portfolio optimization",
+            description: "Generate portfolio recommendations and new investment opportunities",
             parameters: {
               type: "object",
               properties: {
-                recommendations: {
+                portfolio_recommendations: {
                   type: "array",
                   items: {
                     type: "object",
@@ -110,9 +133,22 @@ serve(async (req) => {
                     },
                     required: ["symbol", "action", "confidence", "expected_return", "reasoning"]
                   }
+                },
+                new_opportunities: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      symbol: { type: "string" },
+                      confidence: { type: "number", description: "0-1 confidence score" },
+                      expected_return: { type: "number", description: "Expected return percentage" },
+                      reasoning: { type: "string", description: "Why buy this stock" }
+                    },
+                    required: ["symbol", "confidence", "expected_return", "reasoning"]
+                  }
                 }
               },
-              required: ["recommendations"],
+              required: ["portfolio_recommendations", "new_opportunities"],
               additionalProperties: false
             }
           }
@@ -140,15 +176,15 @@ serve(async (req) => {
     const analysis = JSON.parse(toolCall.function.arguments);
     console.log('Parsed analysis:', JSON.stringify(analysis));
 
-    // Store recommendations in database
-    const recommendations = analysis.recommendations;
-    if (recommendations && recommendations.length > 0) {
-      console.log(`Storing ${recommendations.length} recommendations in database`);
+    // Store portfolio recommendations in database
+    const portfolioRecommendations = analysis.portfolio_recommendations || [];
+    if (portfolioRecommendations.length > 0) {
+      console.log(`Storing ${portfolioRecommendations.length} recommendations in database`);
       
       const { error: insertError } = await supabase
         .from('rl_recommendations')
         .insert(
-          recommendations.map((rec: any) => ({
+          portfolioRecommendations.map((rec: any) => ({
             portfolio_id,
             symbol: rec.symbol,
             action: rec.action,
@@ -165,9 +201,13 @@ serve(async (req) => {
       }
     }
 
-    console.log('Returning recommendations to client');
+    console.log('Returning recommendations and new opportunities to client');
     return new Response(
-      JSON.stringify({ success: true, recommendations }),
+      JSON.stringify({ 
+        success: true, 
+        portfolio_recommendations: portfolioRecommendations,
+        new_opportunities: analysis.new_opportunities || []
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
