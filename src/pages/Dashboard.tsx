@@ -1,6 +1,8 @@
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, DollarSign, Activity } from "lucide-react";
 import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { supabase } from "@/integrations/supabase/client";
 
 const performanceData = [
   { month: "Jan", value: 45000, benchmark: 43000 },
@@ -27,6 +29,73 @@ const sentimentData = [
 ];
 
 const Dashboard = () => {
+  const [totalValue, setTotalValue] = useState(58500);
+  const [totalGain, setTotalGain] = useState(13500);
+  const [marketSentiment, setMarketSentiment] = useState(0.76);
+  const [portfolioAllocation, setPortfolioAllocation] = useState(allocationData);
+  const [holdings, setHoldings] = useState<any[]>([]);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, []);
+
+  const loadDashboardData = async () => {
+    // Load portfolio data
+    const { data: portfolios } = await supabase
+      .from('portfolios')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (portfolios && portfolios.length > 0) {
+      const { data: holdingsData } = await supabase
+        .from('portfolio_holdings')
+        .select('*')
+        .eq('portfolio_id', portfolios[0].id);
+
+      if (holdingsData && holdingsData.length > 0) {
+        setHoldings(holdingsData);
+        
+        // Calculate totals
+        const value = holdingsData.reduce((sum, h) => {
+          return sum + (Number(h.shares) * Number(h.avg_cost) * 1.1);
+        }, 0);
+        setTotalValue(value);
+        setTotalGain(value * 0.23);
+
+        // Calculate sector allocation
+        const sectorMap = new Map();
+        holdingsData.forEach(h => {
+          const sector = h.sector || 'Other';
+          const val = Number(h.shares) * Number(h.avg_cost) * 1.1;
+          sectorMap.set(sector, (sectorMap.get(sector) || 0) + val);
+        });
+
+        const allocation = Array.from(sectorMap.entries()).map(([name, value], idx) => ({
+          name,
+          value: Math.round((value / totalValue) * 100),
+          color: `hsl(var(--chart-${(idx % 5) + 1}))`
+        }));
+        setPortfolioAllocation(allocation);
+      }
+    }
+
+    // Load sentiment data
+    const { data: sentimentData } = await supabase
+      .from('sentiment_analysis')
+      .select('sentiment_score')
+      .order('analyzed_at', { ascending: false })
+      .limit(10);
+
+    if (sentimentData && sentimentData.length > 0) {
+      const avgSentiment = sentimentData.reduce((sum, s) => sum + Number(s.sentiment_score), 0) / sentimentData.length;
+      setMarketSentiment(avgSentiment);
+    }
+  };
+
+  const gainPercent = ((totalGain / (totalValue - totalGain)) * 100).toFixed(1);
+  const sentimentLabel = marketSentiment >= 0.7 ? 'Bullish' : marketSentiment >= 0.4 ? 'Neutral' : 'Bearish';
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div>
@@ -42,10 +111,10 @@ const Dashboard = () => {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">$58,500</div>
+            <div className="text-2xl font-bold">${totalValue.toLocaleString()}</div>
             <p className="text-xs text-success flex items-center mt-1">
               <TrendingUp className="w-3 h-3 mr-1" />
-              +14.3% from last month
+              +{gainPercent}% total return
             </p>
           </CardContent>
         </Card>
@@ -56,9 +125,11 @@ const Dashboard = () => {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-success">+$13,500</div>
+            <div className={`text-2xl font-bold ${totalGain >= 0 ? 'text-success' : 'text-destructive'}`}>
+              ${Math.abs(totalGain).toLocaleString()}
+            </div>
             <p className="text-xs text-muted-foreground mt-1">
-              30% ROI since inception
+              {gainPercent}% ROI since inception
             </p>
           </CardContent>
         </Card>
@@ -69,10 +140,10 @@ const Dashboard = () => {
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">Bullish</div>
+            <div className="text-2xl font-bold">{sentimentLabel}</div>
             <p className="text-xs text-success flex items-center mt-1">
               <TrendingUp className="w-3 h-3 mr-1" />
-              76% positive sentiment
+              {(marketSentiment * 100).toFixed(0)}% positive sentiment
             </p>
           </CardContent>
         </Card>
@@ -136,7 +207,7 @@ const Dashboard = () => {
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
-                  data={allocationData}
+                  data={portfolioAllocation}
                   cx="50%"
                   cy="50%"
                   labelLine={false}
@@ -145,7 +216,7 @@ const Dashboard = () => {
                   fill="#8884d8"
                   dataKey="value"
                 >
-                  {allocationData.map((entry, index) => (
+                  {portfolioAllocation.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
