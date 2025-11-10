@@ -166,7 +166,7 @@ const Portfolio = () => {
               symbol: h.symbol,
               shares: h.shares,
               avg_cost: h.avgCost,
-              sector: h.sector
+              sector: h.sector || 'Unknown'
             }))
           );
 
@@ -178,12 +178,13 @@ const Portfolio = () => {
             variant: "destructive"
           });
         } else {
+          // Reload all data after import
           await loadHoldings(portId);
-          await generateRLRecommendations(portId);
+          await loadRecommendations(portId);
           setShowUpload(false);
           toast({
             title: "Success",
-            description: `Imported ${data.length} holdings successfully`,
+            description: `Imported ${data.length} new holdings. Total holdings: ${holdings.length + data.length}`,
           });
         }
       }
