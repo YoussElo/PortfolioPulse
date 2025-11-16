@@ -7,6 +7,7 @@ import { Brain, TrendingUp, TrendingDown, Minus, RefreshCw } from "lucide-react"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { NewsSection } from "@/components/NewsSection";
 
 const sentimentHistory = [
   { date: "Week 1", overall: 0.65, news: 0.70, social: 0.60 },
@@ -275,6 +276,9 @@ const Sentiment = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Real-Time News */}
+      <NewsSection symbols={sentimentData.map(s => s.symbol)} />
     </div>
   );
 };

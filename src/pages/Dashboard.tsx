@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, DollarSign, Activity } from "lucide-react";
 import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
+import { getSectorForSymbol, getSectorColor } from "@/lib/sectorMapping";
 
 const performanceData = [
   { month: "Jan", value: 45000, benchmark: 43000 },
@@ -63,18 +64,18 @@ const Dashboard = () => {
         setTotalValue(value);
         setTotalGain(value * 0.23);
 
-        // Calculate sector allocation
+        // Calculate sector allocation with auto-detected sectors
         const sectorMap = new Map();
         holdingsData.forEach(h => {
-          const sector = h.sector || 'Other';
+          const sector = getSectorForSymbol(h.symbol);
           const val = Number(h.shares) * Number(h.avg_cost) * 1.1;
           sectorMap.set(sector, (sectorMap.get(sector) || 0) + val);
         });
 
-        const allocation = Array.from(sectorMap.entries()).map(([name, value], idx) => ({
+        const allocation = Array.from(sectorMap.entries()).map(([name, value]) => ({
           name,
-          value: Math.round((value / totalValue) * 100),
-          color: `hsl(var(--chart-${(idx % 5) + 1}))`
+          value: Math.round((value / value) * 100),
+          color: getSectorColor(name)
         }));
         setPortfolioAllocation(allocation);
       }

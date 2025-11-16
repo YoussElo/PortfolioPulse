@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { getSectorForSymbol } from "@/lib/sectorMapping";
 
 const defaultHoldings = [
   { 
@@ -124,7 +125,7 @@ const Portfolio = () => {
       .eq('portfolio_id', portId);
 
     if (data && data.length > 0) {
-      // Transform DB data to UI format (simplified for demo)
+      // Transform DB data to UI format with auto-detected sectors
       const transformed = data.map(h => ({
         symbol: h.symbol,
         name: h.symbol,
@@ -134,7 +135,7 @@ const Portfolio = () => {
         totalValue: Number(h.shares) * Number(h.avg_cost) * 1.1,
         gain: Number(h.shares) * Number(h.avg_cost) * 0.1,
         gainPercent: 10,
-        sector: h.sector || 'Unknown'
+        sector: getSectorForSymbol(h.symbol)
       }));
       setHoldings(transformed);
     }
@@ -181,7 +182,7 @@ const Portfolio = () => {
 
       const portId = newPortfolio.id;
 
-      // Insert holdings
+      // Insert holdings with auto-detected sectors
       const { error } = await supabase
         .from('portfolio_holdings')
         .insert(
@@ -190,7 +191,7 @@ const Portfolio = () => {
             symbol: h.symbol,
             shares: h.shares,
             avg_cost: h.avgCost,
-            sector: h.sector || 'Unknown'
+            sector: getSectorForSymbol(h.symbol)
           }))
         );
 
