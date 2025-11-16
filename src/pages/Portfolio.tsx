@@ -3,12 +3,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, TrendingUp, TrendingDown, Upload } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Upload, RefreshCw } from "lucide-react";
 import { CSVUpload } from "@/components/CSVUpload";
 import { RLRecommendations } from "@/components/RLRecommendations";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 const defaultHoldings = [
   { 
@@ -71,6 +74,9 @@ const defaultHoldings = [
 const Portfolio = () => {
   const [holdings, setHoldings] = useState(defaultHoldings);
   const [portfolioId, setPortfolioId] = useState<string | null>(null);
+  const [portfolios, setPortfolios] = useState<any[]>([]);
+  const [portfolioName, setPortfolioName] = useState("My Portfolio");
+  const [newPortfolioName, setNewPortfolioName] = useState("");
   const [rlRecommendations, setRlRecommendations] = useState<any[]>([]);
   const [newOpportunities, setNewOpportunities] = useState<any[]>([]);
   const [isLoadingRL, setIsLoadingRL] = useState(false);
@@ -83,20 +89,31 @@ const Portfolio = () => {
   const totalGainPercent = ((totalGain / totalCost) * 100).toFixed(1);
 
   useEffect(() => {
-    loadPortfolio();
+    loadAllPortfolios();
   }, []);
 
-  const loadPortfolio = async () => {
-    const { data: portfolios } = await supabase
+  const loadAllPortfolios = async () => {
+    const { data: allPortfolios } = await supabase
       .from('portfolios')
       .select('*')
-      .order('created_at', { ascending: false })
-      .limit(1);
+      .order('created_at', { ascending: false });
 
-    if (portfolios && portfolios.length > 0) {
-      setPortfolioId(portfolios[0].id);
-      loadHoldings(portfolios[0].id);
-      loadRecommendations(portfolios[0].id);
+    if (allPortfolios && allPortfolios.length > 0) {
+      setPortfolios(allPortfolios);
+      setPortfolioId(allPortfolios[0].id);
+      setPortfolioName(allPortfolios[0].name);
+      loadHoldings(allPortfolios[0].id);
+      loadRecommendations(allPortfolios[0].id);
+    }
+  };
+
+  const switchPortfolio = (newPortfolioId: string) => {
+    const selected = portfolios.find(p => p.id === newPortfolioId);
+    if (selected) {
+      setPortfolioId(selected.id);
+      setPortfolioName(selected.name);
+      loadHoldings(selected.id);
+      loadRecommendations(selected.id);
     }
   };
 
@@ -144,49 +161,58 @@ const Portfolio = () => {
 
   const handleCSVData = async (data: any[]) => {
     try {
-      // Create portfolio if doesn't exist
-      let portId = portfolioId;
-      if (!portId) {
-        const { data: newPortfolio } = await supabase
-          .from('portfolios')
-          .insert({ name: 'Imported Portfolio' })
-          .select()
-          .single();
-        portId = newPortfolio?.id || null;
-        setPortfolioId(portId);
+      const portfolioNameToUse = newPortfolioName.trim() || `Portfolio ${new Date().toLocaleDateString()}`;
+      
+      // Always create a new portfolio for each CSV import
+      const { data: newPortfolio, error: portfolioError } = await supabase
+        .from('portfolios')
+        .insert({ name: portfolioNameToUse })
+        .select()
+        .single();
+
+      if (portfolioError || !newPortfolio) {
+        toast({
+          title: "Error",
+          description: "Failed to create portfolio",
+          variant: "destructive"
+        });
+        return;
       }
 
-      if (portId) {
-        // Insert holdings
-        const { error } = await supabase
-          .from('portfolio_holdings')
-          .insert(
-            data.map(h => ({
-              portfolio_id: portId,
-              symbol: h.symbol,
-              shares: h.shares,
-              avg_cost: h.avgCost,
-              sector: h.sector || 'Unknown'
-            }))
-          );
+      const portId = newPortfolio.id;
 
-        if (error) {
-          console.error('Error inserting holdings:', error);
-          toast({
-            title: "Error",
-            description: error.message || "Failed to save portfolio holdings",
-            variant: "destructive"
-          });
-        } else {
-          // Reload all data after import
-          await loadHoldings(portId);
-          await loadRecommendations(portId);
-          setShowUpload(false);
-          toast({
-            title: "Success",
-            description: `Imported ${data.length} new holdings. Total holdings: ${holdings.length + data.length}`,
-          });
-        }
+      // Insert holdings
+      const { error } = await supabase
+        .from('portfolio_holdings')
+        .insert(
+          data.map(h => ({
+            portfolio_id: portId,
+            symbol: h.symbol,
+            shares: h.shares,
+            avg_cost: h.avgCost,
+            sector: h.sector || 'Unknown'
+          }))
+        );
+
+      if (error) {
+        console.error('Error inserting holdings:', error);
+        toast({
+          title: "Error",
+          description: error.message || "Failed to save portfolio holdings",
+          variant: "destructive"
+        });
+      } else {
+        // Reload all portfolios and switch to the new one
+        await loadAllPortfolios();
+        setPortfolioId(portId);
+        setPortfolioName(portfolioNameToUse);
+        await loadHoldings(portId);
+        setShowUpload(false);
+        setNewPortfolioName("");
+        toast({
+          title: "Success",
+          description: `Created "${portfolioNameToUse}" with ${data.length} holdings`,
+        });
       }
     } catch (error) {
       console.error('Error saving portfolio:', error);
@@ -268,12 +294,29 @@ const Portfolio = () => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex justify-between items-center">
-        <div>
+      <div className="flex justify-between items-center gap-4">
+        <div className="flex-1">
           <h1 className="text-3xl font-bold">Portfolio</h1>
           <p className="text-muted-foreground">Manage your investment holdings</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {portfolios.length > 0 && (
+            <Select value={portfolioId || undefined} onValueChange={switchPortfolio}>
+              <SelectTrigger className="w-[240px]">
+                <SelectValue placeholder="Select portfolio" />
+              </SelectTrigger>
+              <SelectContent>
+                {portfolios.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Button variant="outline" size="icon" onClick={loadAllPortfolios}>
+            <RefreshCw className="h-4 w-4" />
+          </Button>
           <Dialog open={showUpload} onOpenChange={setShowUpload}>
             <DialogTrigger asChild>
               <Button variant="outline">
@@ -283,12 +326,26 @@ const Portfolio = () => {
             </DialogTrigger>
             <DialogContent className="max-w-2xl">
               <DialogHeader>
-                <DialogTitle>Import Portfolio from CSV</DialogTitle>
+                <DialogTitle>Import New Portfolio from CSV</DialogTitle>
               </DialogHeader>
-              <CSVUpload onDataParsed={handleCSVData} />
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="portfolio-name">Portfolio Name</Label>
+                  <Input
+                    id="portfolio-name"
+                    placeholder="e.g., Q1 2025 Portfolio"
+                    value={newPortfolioName}
+                    onChange={(e) => setNewPortfolioName(e.target.value)}
+                  />
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Leave empty to auto-generate name with today's date
+                  </p>
+                </div>
+                <CSVUpload onDataParsed={handleCSVData} />
+              </div>
             </DialogContent>
           </Dialog>
-          <Button onClick={() => generateRLRecommendations(portfolioId)} disabled={isLoadingRL}>
+          <Button onClick={() => generateRLRecommendations(portfolioId)} disabled={isLoadingRL || !portfolioId}>
             <Plus className="mr-2 h-4 w-4" />
             {isLoadingRL ? 'Analyzing...' : 'Generate RL Insights'}
           </Button>
