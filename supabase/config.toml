@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.rl-recommendations]
 verify_jwt = false
+
+[functions.fetch-news]
+verify_jwt = false
