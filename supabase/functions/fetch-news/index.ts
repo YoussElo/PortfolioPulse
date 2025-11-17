@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -22,6 +21,46 @@ interface Article {
   description: string;
 }
 
+// Simple XML parser for RSS feeds
+function parseRSSFeed(xmlText: string): Article[] {
+  const articles: Article[] = [];
+  
+  // Extract items using regex
+  const itemRegex = /<item[^>]*>([\s\S]*?)<\/item>/gi;
+  const items = xmlText.match(itemRegex);
+  
+  if (!items) return articles;
+  
+  items.forEach((item) => {
+    // Extract title
+    const titleMatch = item.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    const title = titleMatch ? titleMatch[1].replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1').trim() : '';
+    
+    // Extract link
+    const linkMatch = item.match(/<link[^>]*>([\s\S]*?)<\/link>/i);
+    const link = linkMatch ? linkMatch[1].replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1').trim() : '';
+    
+    // Extract description
+    const descMatch = item.match(/<description[^>]*>([\s\S]*?)<\/description>/i);
+    const description = descMatch ? descMatch[1].replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1').replace(/<[^>]*>/g, '').trim() : '';
+    
+    // Extract pubDate
+    const pubDateMatch = item.match(/<pubDate[^>]*>([\s\S]*?)<\/pubDate>/i);
+    const pubDate = pubDateMatch ? pubDateMatch[1].trim() : '';
+    
+    if (title && link) {
+      articles.push({
+        title,
+        url: link,
+        description: description.substring(0, 150),
+        pubDate, // Keep pubDate for later processing
+      } as any);
+    }
+  });
+  
+  return articles;
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -37,21 +76,18 @@ serve(async (req) => {
     // Fetch from multiple RSS feeds
     for (const feedUrl of RSS_FEEDS) {
       try {
+        console.log(`Fetching feed: ${feedUrl}`);
         const response = await fetch(feedUrl);
-        if (!response.ok) continue;
+        if (!response.ok) {
+          console.log(`Feed ${feedUrl} returned ${response.status}`);
+          continue;
+        }
         
         const xmlText = await response.text();
-        const doc = new DOMParser().parseFromString(xmlText, "text/xml");
+        const parsedArticles = parseRSSFeed(xmlText);
         
-        if (!doc) continue;
-
-        const items = doc.querySelectorAll("item");
-        
-        items.forEach((item: any) => {
-          const title = item.querySelector("title")?.textContent || "";
-          const link = item.querySelector("link")?.textContent || "";
-          const description = item.querySelector("description")?.textContent || "";
-          const pubDate = item.querySelector("pubDate")?.textContent || "";
+        parsedArticles.forEach((article: any) => {
+          const { title, url, description, pubDate } = article;
           
           // Filter by symbols if provided
           if (symbols.length > 0) {
@@ -96,17 +132,17 @@ serve(async (req) => {
             publishedTime = publishedDate.toLocaleDateString();
           }
 
-          if (title && link) {
-            allArticles.push({
-              title,
-              url: link,
-              source: new URL(feedUrl).hostname.replace('www.', ''),
-              published: publishedTime,
-              sentiment,
-              description: description.substring(0, 150)
-            });
-          }
+          allArticles.push({
+            title,
+            url,
+            source: new URL(feedUrl).hostname.replace('www.', ''),
+            published: publishedTime,
+            sentiment,
+            description: description.substring(0, 150)
+          });
         });
+        
+        console.log(`Parsed ${parsedArticles.length} articles from ${feedUrl}`);
       } catch (error) {
         console.error(`Error fetching feed ${feedUrl}:`, error);
         continue;
