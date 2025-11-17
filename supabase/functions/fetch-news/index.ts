@@ -1,19 +1,25 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface NewsArticle {
+// RSS feed sources for financial news
+const RSS_FEEDS = [
+  'https://feeds.finance.yahoo.com/rss/2.0/headline',
+  'https://www.cnbc.com/id/10000664/device/rss/rss.html',
+  'https://www.investing.com/rss/news.rss',
+];
+
+interface Article {
   title: string;
   url: string;
-  source: {
-    name: string;
-  };
-  publishedAt: string;
+  source: string;
+  published: string;
+  sentiment: string;
   description: string;
-  sentiment?: string;
 }
 
 serve(async (req) => {
@@ -26,85 +32,96 @@ serve(async (req) => {
     const { symbols = [] } = await req.json();
     console.log('Fetching news for symbols:', symbols);
 
-    const NEWSAPI_KEY = Deno.env.get('NEWSAPI_KEY');
-    if (!NEWSAPI_KEY) {
-      throw new Error('NEWSAPI_KEY not configured');
-    }
+    const allArticles: Article[] = [];
 
-    // Build search query from symbols
-    const query = symbols.length > 0 
-      ? symbols.map((s: string) => s.toUpperCase()).join(' OR ')
-      : 'stock market OR finance OR investing';
+    // Fetch from multiple RSS feeds
+    for (const feedUrl of RSS_FEEDS) {
+      try {
+        const response = await fetch(feedUrl);
+        if (!response.ok) continue;
+        
+        const xmlText = await response.text();
+        const doc = new DOMParser().parseFromString(xmlText, "text/xml");
+        
+        if (!doc) continue;
 
-    console.log('Search query:', query);
+        const items = doc.querySelectorAll("item");
+        
+        items.forEach((item: any) => {
+          const title = item.querySelector("title")?.textContent || "";
+          const link = item.querySelector("link")?.textContent || "";
+          const description = item.querySelector("description")?.textContent || "";
+          const pubDate = item.querySelector("pubDate")?.textContent || "";
+          
+          // Filter by symbols if provided
+          if (symbols.length > 0) {
+            const hasSymbol = symbols.some((symbol: string) => 
+              title.toUpperCase().includes(symbol.toUpperCase()) ||
+              description.toUpperCase().includes(symbol.toUpperCase())
+            );
+            if (!hasSymbol) return;
+          }
 
-    // Fetch news from NewsAPI
-    const newsUrl = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&sortBy=publishedAt&language=en&pageSize=10&apiKey=${NEWSAPI_KEY}`;
-    
-    const response = await fetch(newsUrl);
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('NewsAPI error:', response.status, errorText);
-      throw new Error(`NewsAPI returned ${response.status}: ${errorText}`);
-    }
+          // Simple sentiment analysis
+          const text = `${title} ${description}`.toLowerCase();
+          let sentiment = 'neutral';
+          
+          const positiveKeywords = ['surge', 'rally', 'gain', 'rise', 'bullish', 'growth', 'profit', 'beat', 'success', 'positive', 'upgrade', 'up'];
+          const negativeKeywords = ['fall', 'drop', 'decline', 'bearish', 'loss', 'miss', 'negative', 'down', 'crash', 'plunge', 'downgrade'];
+          
+          const positiveCount = positiveKeywords.filter(word => text.includes(word)).length;
+          const negativeCount = negativeKeywords.filter(word => text.includes(word)).length;
+          
+          if (positiveCount > negativeCount) {
+            sentiment = 'positive';
+          } else if (negativeCount > positiveCount) {
+            sentiment = 'negative';
+          }
 
-    const data = await response.json();
-    console.log('NewsAPI response:', { 
-      status: data.status, 
-      totalResults: data.totalResults,
-      articlesCount: data.articles?.length 
-    });
+          // Calculate relative time
+          const publishedDate = new Date(pubDate);
+          const now = new Date();
+          const diffMs = now.getTime() - publishedDate.getTime();
+          const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+          const diffDays = Math.floor(diffHours / 24);
+          
+          let publishedTime;
+          if (diffHours < 1) {
+            publishedTime = 'Just now';
+          } else if (diffHours < 24) {
+            publishedTime = `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+          } else if (diffDays < 7) {
+            publishedTime = `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+          } else {
+            publishedTime = publishedDate.toLocaleDateString();
+          }
 
-    if (data.status !== 'ok') {
-      throw new Error(`NewsAPI status: ${data.status}`);
-    }
-
-    // Transform and analyze sentiment
-    const articles = data.articles.map((article: NewsArticle) => {
-      // Simple sentiment analysis based on keywords
-      const text = `${article.title} ${article.description}`.toLowerCase();
-      let sentiment = 'neutral';
-      
-      const positiveKeywords = ['surge', 'rally', 'gain', 'rise', 'bullish', 'growth', 'profit', 'beat', 'success', 'positive', 'upgrade', 'up'];
-      const negativeKeywords = ['fall', 'drop', 'decline', 'bearish', 'loss', 'miss', 'negative', 'down', 'crash', 'plunge', 'downgrade'];
-      
-      const positiveCount = positiveKeywords.filter(word => text.includes(word)).length;
-      const negativeCount = negativeKeywords.filter(word => text.includes(word)).length;
-      
-      if (positiveCount > negativeCount) {
-        sentiment = 'positive';
-      } else if (negativeCount > positiveCount) {
-        sentiment = 'negative';
+          if (title && link) {
+            allArticles.push({
+              title,
+              url: link,
+              source: new URL(feedUrl).hostname.replace('www.', ''),
+              published: publishedTime,
+              sentiment,
+              description: description.substring(0, 150)
+            });
+          }
+        });
+      } catch (error) {
+        console.error(`Error fetching feed ${feedUrl}:`, error);
+        continue;
       }
+    }
 
-      // Calculate relative time
-      const publishedDate = new Date(article.publishedAt);
-      const now = new Date();
-      const diffMs = now.getTime() - publishedDate.getTime();
-      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-      const diffDays = Math.floor(diffHours / 24);
-      
-      let publishedTime;
-      if (diffHours < 1) {
-        publishedTime = 'Just now';
-      } else if (diffHours < 24) {
-        publishedTime = `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-      } else if (diffDays < 7) {
-        publishedTime = `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
-      } else {
-        publishedTime = publishedDate.toLocaleDateString();
-      }
-
-      return {
-        title: article.title,
-        url: article.url,
-        source: article.source.name,
-        published: publishedTime,
-        sentiment: sentiment,
-        description: article.description
-      };
-    }).filter((article: any) => article.title && article.url); // Filter out invalid articles
+    // Sort by most recent and limit to 10
+    const articles = allArticles
+      .sort((a, b) => {
+        // Simple sorting - prioritize "Just now" and recent items
+        if (a.published === 'Just now') return -1;
+        if (b.published === 'Just now') return 1;
+        return 0;
+      })
+      .slice(0, 10);
 
     console.log(`Returning ${articles.length} articles`);
 
@@ -112,7 +129,7 @@ serve(async (req) => {
       JSON.stringify({ 
         success: true, 
         articles: articles,
-        totalResults: data.totalResults 
+        totalResults: articles.length 
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

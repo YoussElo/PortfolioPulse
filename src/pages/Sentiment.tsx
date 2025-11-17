@@ -239,44 +239,6 @@ const Sentiment = () => {
         </CardContent>
       </Card>
 
-      {/* How It Works */}
-      <Card className="bg-muted/30">
-        <CardHeader>
-          <CardTitle>How AI Sentiment Analysis Works</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xl">
-                1
-              </div>
-              <h4 className="font-semibold">Data Collection</h4>
-              <p className="text-sm text-muted-foreground">
-                We aggregate data from news articles, social media, analyst reports, and financial forums in real-time.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xl">
-                2
-              </div>
-              <h4 className="font-semibold">NLP Processing</h4>
-              <p className="text-sm text-muted-foreground">
-                Advanced transformer models (BERT, FinBERT) analyze text to extract sentiment, context, and market signals.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xl">
-                3
-              </div>
-              <h4 className="font-semibold">Score Generation</h4>
-              <p className="text-sm text-muted-foreground">
-                Weighted sentiment scores (0-1) are calculated and visualized, helping you make informed decisions.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Real-Time News */}
       <NewsSection symbols={sentimentData.map(s => s.symbol)} />
     </div>
