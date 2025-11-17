@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Newspaper, ExternalLink, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 interface NewsItem {
   title: string;
@@ -11,6 +12,7 @@ interface NewsItem {
   source: string;
   published: string;
   sentiment: 'positive' | 'negative' | 'neutral';
+  description?: string;
 }
 
 interface NewsSectionProps {
@@ -22,69 +24,46 @@ export const NewsSection = ({ symbols = [] }: NewsSectionProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
-  const mockNews: NewsItem[] = [
-    {
-      title: "Market Rally Continues as Tech Stocks Surge",
-      url: "#",
-      source: "Financial Times",
-      published: "2 hours ago",
-      sentiment: 'positive'
-    },
-    {
-      title: "Fed Signals Potential Rate Cuts in Q2",
-      url: "#",
-      source: "Bloomberg",
-      published: "4 hours ago",
-      sentiment: 'positive'
-    },
-    {
-      title: "Apple Unveils New AI Features for iPhone",
-      url: "#",
-      source: "Reuters",
-      published: "5 hours ago",
-      sentiment: 'positive'
-    },
-    {
-      title: "Energy Sector Faces Headwinds from Oil Price Volatility",
-      url: "#",
-      source: "WSJ",
-      published: "6 hours ago",
-      sentiment: 'negative'
-    },
-    {
-      title: "Microsoft Cloud Revenue Beats Expectations",
-      url: "#",
-      source: "CNBC",
-      published: "8 hours ago",
-      sentiment: 'positive'
-    },
-    {
-      title: "Market Analysis: Mixed Signals from Economic Data",
-      url: "#",
-      source: "MarketWatch",
-      published: "10 hours ago",
-      sentiment: 'neutral'
-    }
-  ];
-
   useEffect(() => {
     loadNews();
-  }, [symbols]);
+  }, [symbols.join(',')]); // Use join to properly track array changes
 
   const loadNews = async () => {
     setIsLoading(true);
     try {
-      // In production, this would fetch from a real news API
-      // For now, using mock data
-      await new Promise(resolve => setTimeout(resolve, 500));
-      setNews(mockNews);
+      console.log('Fetching news for symbols:', symbols);
+      
+      const { data, error } = await supabase.functions.invoke('fetch-news', {
+        body: { symbols }
+      });
+
+      if (error) {
+        console.error('Error fetching news:', error);
+        throw error;
+      }
+
+      if (data?.success && data?.articles) {
+        console.log('Received articles:', data.articles.length);
+        setNews(data.articles);
+        
+        if (data.articles.length === 0) {
+          toast({
+            title: "No News Found",
+            description: "No recent news articles found for the selected stocks",
+          });
+        }
+      } else {
+        throw new Error(data?.error || 'Failed to fetch news');
+      }
     } catch (error) {
       console.error('Error loading news:', error);
       toast({
         title: "Error",
-        description: "Failed to load news",
+        description: "Failed to load news. Please try again.",
         variant: "destructive"
       });
+      // Set empty array on error
+      setNews([]);
     } finally {
       setIsLoading(false);
     }
@@ -120,36 +99,52 @@ export const NewsSection = ({ symbols = [] }: NewsSectionProps) => {
         </Button>
       </CardHeader>
       <CardContent>
-        <div className="space-y-4">
-          {news.map((item, index) => (
-            <div 
-              key={index}
-              className="flex items-start justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
-            >
-              <div className="flex-1">
-                <div className="flex items-start gap-2">
-                  <h4 className="font-semibold text-sm leading-tight">
-                    {item.title}
-                  </h4>
-                  {getSentimentBadge(item.sentiment)}
-                </div>
-                <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-                  <span className="font-medium">{item.source}</span>
-                  <span>•</span>
-                  <span>{item.published}</span>
-                </div>
-              </div>
-              <Button 
-                variant="ghost" 
-                size="icon"
-                className="ml-2 shrink-0"
-                onClick={() => window.open(item.url, '_blank')}
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : news.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <Newspaper className="w-12 h-12 mx-auto mb-2 opacity-50" />
+            <p>No news articles available</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {news.map((item, index) => (
+              <div 
+                key={index}
+                className="flex items-start justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
               >
-                <ExternalLink className="w-4 h-4" />
-              </Button>
-            </div>
-          ))}
-        </div>
+                <div className="flex-1">
+                  <div className="flex items-start gap-2">
+                    <h4 className="font-semibold text-sm leading-tight">
+                      {item.title}
+                    </h4>
+                    {getSentimentBadge(item.sentiment)}
+                  </div>
+                  {item.description && (
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                      {item.description}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+                    <span className="font-medium">{item.source}</span>
+                    <span>•</span>
+                    <span>{item.published}</span>
+                  </div>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  className="ml-2 shrink-0"
+                  onClick={() => window.open(item.url, '_blank')}
+                >
+                  <ExternalLink className="w-4 h-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
