@@ -4,62 +4,90 @@ import { TrendingUp, TrendingDown, DollarSign, Activity } from "lucide-react";
 import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { getSectorForSymbol, getSectorColor } from "@/lib/sectorMapping";
-
-const performanceData = [
-  { month: "Jan", value: 45000, benchmark: 43000 },
-  { month: "Feb", value: 47500, benchmark: 44000 },
-  { month: "Mar", value: 46800, benchmark: 45200 },
-  { month: "Apr", value: 51200, benchmark: 46500 },
-  { month: "May", value: 53800, benchmark: 48000 },
-  { month: "Jun", value: 58500, benchmark: 49500 },
-];
-
-const allocationData = [
-  { name: "Tech", value: 40, color: "hsl(var(--chart-1))" },
-  { name: "Finance", value: 25, color: "hsl(var(--chart-2))" },
-  { name: "Healthcare", value: 20, color: "hsl(var(--chart-3))" },
-  { name: "Energy", value: 15, color: "hsl(var(--chart-4))" },
-];
-
-const sentimentData = [
-  { date: "Mon", score: 0.65 },
-  { date: "Tue", score: 0.72 },
-  { date: "Wed", score: 0.58 },
-  { date: "Thu", score: 0.81 },
-  { date: "Fri", score: 0.76 },
-];
-
+const performanceData = [{
+  month: "Jan",
+  value: 45000,
+  benchmark: 43000
+}, {
+  month: "Feb",
+  value: 47500,
+  benchmark: 44000
+}, {
+  month: "Mar",
+  value: 46800,
+  benchmark: 45200
+}, {
+  month: "Apr",
+  value: 51200,
+  benchmark: 46500
+}, {
+  month: "May",
+  value: 53800,
+  benchmark: 48000
+}, {
+  month: "Jun",
+  value: 58500,
+  benchmark: 49500
+}];
+const allocationData = [{
+  name: "Tech",
+  value: 40,
+  color: "hsl(var(--chart-1))"
+}, {
+  name: "Finance",
+  value: 25,
+  color: "hsl(var(--chart-2))"
+}, {
+  name: "Healthcare",
+  value: 20,
+  color: "hsl(var(--chart-3))"
+}, {
+  name: "Energy",
+  value: 15,
+  color: "hsl(var(--chart-4))"
+}];
+const sentimentData = [{
+  date: "Mon",
+  score: 0.65
+}, {
+  date: "Tue",
+  score: 0.72
+}, {
+  date: "Wed",
+  score: 0.58
+}, {
+  date: "Thu",
+  score: 0.81
+}, {
+  date: "Fri",
+  score: 0.76
+}];
 const Dashboard = () => {
   const [totalValue, setTotalValue] = useState(58500);
   const [totalGain, setTotalGain] = useState(13500);
   const [marketSentiment, setMarketSentiment] = useState(0.76);
   const [portfolioAllocation, setPortfolioAllocation] = useState(allocationData);
   const [holdings, setHoldings] = useState<any[]>([]);
-
   useEffect(() => {
     loadDashboardData();
   }, []);
-
   const loadDashboardData = async () => {
     // Load portfolio data
-    const { data: portfolios } = await supabase
-      .from('portfolios')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(1);
-
+    const {
+      data: portfolios
+    } = await supabase.from('portfolios').select('*').order('created_at', {
+      ascending: false
+    }).limit(1);
     if (portfolios && portfolios.length > 0) {
-      const { data: holdingsData } = await supabase
-        .from('portfolio_holdings')
-        .select('*')
-        .eq('portfolio_id', portfolios[0].id);
-
+      const {
+        data: holdingsData
+      } = await supabase.from('portfolio_holdings').select('*').eq('portfolio_id', portfolios[0].id);
       if (holdingsData && holdingsData.length > 0) {
         setHoldings(holdingsData);
-        
+
         // Calculate totals
         const value = holdingsData.reduce((sum, h) => {
-          return sum + (Number(h.shares) * Number(h.avg_cost) * 1.1);
+          return sum + Number(h.shares) * Number(h.avg_cost) * 1.1;
         }, 0);
         setTotalValue(value);
         setTotalGain(value * 0.23);
@@ -71,10 +99,9 @@ const Dashboard = () => {
           const val = Number(h.shares) * Number(h.avg_cost) * 1.1;
           sectorMap.set(sector, (sectorMap.get(sector) || 0) + val);
         });
-
         const allocation = Array.from(sectorMap.entries()).map(([name, value]) => ({
           name,
-          value: Math.round((value / value) * 100),
+          value: Math.round(value / value * 100),
           color: getSectorColor(name)
         }));
         setPortfolioAllocation(allocation);
@@ -82,23 +109,19 @@ const Dashboard = () => {
     }
 
     // Load sentiment data
-    const { data: sentimentData } = await supabase
-      .from('sentiment_analysis')
-      .select('sentiment_score')
-      .order('analyzed_at', { ascending: false })
-      .limit(10);
-
+    const {
+      data: sentimentData
+    } = await supabase.from('sentiment_analysis').select('sentiment_score').order('analyzed_at', {
+      ascending: false
+    }).limit(10);
     if (sentimentData && sentimentData.length > 0) {
       const avgSentiment = sentimentData.reduce((sum, s) => sum + Number(s.sentiment_score), 0) / sentimentData.length;
       setMarketSentiment(avgSentiment);
     }
   };
-
-  const gainPercent = ((totalGain / (totalValue - totalGain)) * 100).toFixed(1);
+  const gainPercent = (totalGain / (totalValue - totalGain) * 100).toFixed(1);
   const sentimentLabel = marketSentiment >= 0.7 ? 'Bullish' : marketSentiment >= 0.4 ? 'Neutral' : 'Bearish';
-
-  return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+  return <div className="space-y-6 animate-in fade-in duration-500">
       <div>
         <h1 className="text-3xl font-bold">Dashboard</h1>
         <p className="text-muted-foreground">Welcome to your portfolio analytics</p>
@@ -166,38 +189,8 @@ const Dashboard = () => {
       {/* Charts */}
       <div className="grid gap-4 md:grid-cols-2">
         <Card className="col-span-2">
-          <CardHeader>
-            <CardTitle>Portfolio Performance vs Benchmark</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={performanceData}>
-                <defs>
-                  <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8}/>
-                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
-                  </linearGradient>
-                  <linearGradient id="colorBenchmark" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(var(--muted-foreground))" stopOpacity={0.8}/>
-                    <stop offset="95%" stopColor="hsl(var(--muted-foreground))" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" />
-                <YAxis stroke="hsl(var(--muted-foreground))" />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: "hsl(var(--card))", 
-                    border: "1px solid hsl(var(--border))",
-                    borderRadius: "var(--radius)"
-                  }} 
-                />
-                <Legend />
-                <Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorValue)" name="Your Portfolio" />
-                <Area type="monotone" dataKey="benchmark" stroke="hsl(var(--muted-foreground))" fillOpacity={1} fill="url(#colorBenchmark)" name="S&P 500" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </CardContent>
+          
+          
         </Card>
 
         <Card>
@@ -207,27 +200,17 @@ const Dashboard = () => {
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
-                <Pie
-                  data={portfolioAllocation}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {portfolioAllocation.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
+                <Pie data={portfolioAllocation} cx="50%" cy="50%" labelLine={false} label={({
+                name,
+                percent
+              }) => `${name} ${(percent * 100).toFixed(0)}%`} outerRadius={80} fill="#8884d8" dataKey="value">
+                  {portfolioAllocation.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
                 </Pie>
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: "hsl(var(--card))", 
-                    border: "1px solid hsl(var(--border))",
-                    borderRadius: "var(--radius)"
-                  }} 
-                />
+                <Tooltip contentStyle={{
+                backgroundColor: "hsl(var(--card))",
+                border: "1px solid hsl(var(--border))",
+                borderRadius: "var(--radius)"
+              }} />
               </PieChart>
             </ResponsiveContainer>
           </CardContent>
@@ -243,21 +226,17 @@ const Dashboard = () => {
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" />
                 <YAxis domain={[0, 1]} stroke="hsl(var(--muted-foreground))" />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: "hsl(var(--card))", 
-                    border: "1px solid hsl(var(--border))",
-                    borderRadius: "var(--radius)"
-                  }} 
-                />
+                <Tooltip contentStyle={{
+                backgroundColor: "hsl(var(--card))",
+                border: "1px solid hsl(var(--border))",
+                borderRadius: "var(--radius)"
+              }} />
                 <Bar dataKey="score" fill="hsl(var(--accent))" radius={[8, 8, 0, 0]} name="Sentiment" />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
       </div>
-    </div>
-  );
+    </div>;
 };
-
 export default Dashboard;
