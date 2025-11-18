@@ -2,9 +2,16 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Newspaper, ExternalLink, RefreshCw } from "lucide-react";
+import { Newspaper, ExternalLink, RefreshCw, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface NewsItem {
   title: string;
@@ -22,10 +29,18 @@ interface NewsSectionProps {
 export const NewsSection = ({ symbols = [] }: NewsSectionProps) => {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedArticle, setSelectedArticle] = useState<NewsItem | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
     loadNews();
+    
+    // Auto-refresh news every 5 minutes
+    const interval = setInterval(() => {
+      loadNews();
+    }, 5 * 60 * 1000);
+
+    return () => clearInterval(interval);
   }, [symbols.join(',')]); // Use join to properly track array changes
 
   const loadNews = async () => {
@@ -113,7 +128,8 @@ export const NewsSection = ({ symbols = [] }: NewsSectionProps) => {
             {news.map((item, index) => (
               <div 
                 key={index}
-                className="flex items-start justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                className="flex items-start justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer"
+                onClick={() => setSelectedArticle(item)}
               >
                 <div className="flex-1">
                   <div className="flex items-start gap-2">
@@ -137,7 +153,10 @@ export const NewsSection = ({ symbols = [] }: NewsSectionProps) => {
                   variant="ghost" 
                   size="icon"
                   className="ml-2 shrink-0"
-                  onClick={() => window.open(item.url, '_blank')}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    window.open(item.url, '_blank');
+                  }}
                 >
                   <ExternalLink className="w-4 h-4" />
                 </Button>
@@ -146,6 +165,48 @@ export const NewsSection = ({ symbols = [] }: NewsSectionProps) => {
           </div>
         )}
       </CardContent>
+
+      <Dialog open={!!selectedArticle} onOpenChange={() => setSelectedArticle(null)}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-xl pr-8">{selectedArticle?.title}</DialogTitle>
+            <DialogDescription className="flex items-center gap-4 pt-2">
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{selectedArticle?.source}</span>
+                {selectedArticle && getSentimentBadge(selectedArticle.sentiment)}
+              </div>
+              <div className="flex items-center gap-1 text-muted-foreground">
+                <Clock className="w-3 h-3" />
+                <span className="text-xs">{selectedArticle?.published}</span>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 pt-4">
+            {selectedArticle?.description && (
+              <p className="text-sm text-foreground leading-relaxed">
+                {selectedArticle.description}
+              </p>
+            )}
+            
+            <div className="flex gap-2 pt-4 border-t">
+              <Button
+                onClick={() => window.open(selectedArticle?.url, '_blank')}
+                className="flex-1"
+              >
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Read Full Article
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setSelectedArticle(null)}
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };
