@@ -1,73 +1,28 @@
-# Welcome to your Lovable project
+# PortfolioPulse
 
-## Project info
+A portfolio tracking dashboard: import your holdings from a CSV, follow the news on each position, get an LLM-assisted sentiment read and a risk view.
 
-**URL**: https://lovable.dev/projects/603ecc7a-efbc-4ba2-a317-2d95c54e0f1d
+Built with React, TypeScript, Vite, Tailwind and shadcn/ui, with Supabase for storage and edge functions. Generated with Lovable.
 
-## How can I edit this code?
+## What it does
 
-There are several ways of editing your application.
+- **Portfolio**: create portfolios and import holdings from a CSV.
+- **News**: pulls finance headlines from public RSS feeds (Yahoo Finance, CNBC, Investing.com) through an edge function (`fetch-news`).
+- **Sentiment**: scores the news with an LLM (Gemini 2.5 Flash through the Lovable AI gateway, `analyze-sentiment`).
+- **Recommendations**: asks the same LLM for buy, sell or rebalance suggestions with a confidence and a rationale (`rl-recommendations`).
+- **Risk**: a risk analysis page on the holdings.
 
-**Use Lovable**
+## Limits you should know about
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/603ecc7a-efbc-4ba2-a317-2d95c54e0f1d) and start prompting.
+- The function and table named `rl-recommendations` are **not reinforcement learning**. They are LLM prompts, and the name is misleading.
+- The portfolio page does not use live prices yet: current price is simulated as the average cost times 1.1. P&L figures are therefore illustrative.
+- Recommendations are generated text, not a validated model. This is a demo, not investment advice.
 
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+## Run it
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+npm install
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/603ecc7a-efbc-4ba2-a317-2d95c54e0f1d) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+Create a `.env` with `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` from your own Supabase project. The edge functions read `LOVABLE_API_KEY`, `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` from the project secrets.
